@@ -42,7 +42,7 @@ func Arp() {
 			if ip, ok := addrObj.(*net.IPNet); ok {
 				if ip.IP.To4() != nil {
 					fmt.Printf("网卡名: %s, ips: %v\n", iface.Name, addrObj)
-					GetIpsViaIPNet(ip)
+					GetIps(ip)
 				}
 			}
 		}
@@ -51,6 +51,7 @@ func Arp() {
 	}
 }
 
+// 废弃，实现的比较冗余
 // 获取同子网的所有 ip , 因为 ARP 协议作用范围在局域网中
 func GetIpsViaIPNet(ipNet *net.IPNet) []net.IP {
 	ipBegin := ipNet.IP.Mask((ipNet.Mask))
@@ -73,9 +74,9 @@ func GetIpsViaIPNet(ipNet *net.IPNet) []net.IP {
 	return ipList
 }
 
+// 获取同子网的所有 ip , 因为 ARP 协议作用范围在局域网中
 func GetIps(ipNet *net.IPNet) []net.IP {
 	var ipList []net.IP
-	// var ipStringSet []string
 
 	for ip := ipNet.IP.Mask(ipNet.Mask); ipNet.Contains(ip); NextIP(ip) {
 		ipNext := make([]byte, len(ip))
