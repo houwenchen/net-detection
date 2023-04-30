@@ -42,10 +42,164 @@ func Arp() {
 			if ip, ok := addrObj.(*net.IPNet); ok {
 				if ip.IP.To4() != nil {
 					fmt.Printf("网卡名: %s, ips: %v\n", iface.Name, addrObj)
+					GetIpsViaIPNet(ip)
 				}
 			}
 		}
 
 		// fmt.Println(iface.Name)
 	}
+}
+
+// 获取同子网的所有 ip , 因为 ARP 协议作用范围在局域网中
+func GetIpsViaIPNet(ipNet *net.IPNet) []net.IP {
+	ipBegin := ipNet.IP.Mask((ipNet.Mask))
+	ones, bits := ipNet.Mask.Size()
+	ipLenth := bits - ones
+	var ipList []net.IP
+
+	if ipLenth > 24 {
+		ipList = getIpsForFourLayers(ipNet, ipBegin, ipLenth)
+	} else if ipLenth > 16 {
+		ipList = getIpsForThreeLayers(ipNet, ipBegin, ipLenth)
+	} else if ipLenth > 8 {
+		ipList = getIpsForTwoLayers(ipNet, ipBegin, ipLenth)
+	} else {
+		ipList = getIpsForOneLayers(ipNet, ipBegin, ipLenth)
+	}
+
+	fmt.Println(ipList)
+
+	return ipList
+}
+
+func GetIps(ipNet *net.IPNet) []net.IP {
+	var ipList []net.IP
+	// var ipStringSet []string
+
+	for ip := ipNet.IP.Mask(ipNet.Mask); ipNet.Contains(ip); NextIP(ip) {
+		ipNext := make([]byte, len(ip))
+		copy(ipNext, ip)
+		ipList = append(ipList, ipNext)
+	}
+	return ipList
+}
+
+func getIpsForFourLayers(ipNet *net.IPNet, ipBegin net.IP, ipLenth int) []net.IP {
+	ipList := []net.IP{}
+
+	for n := 0; n < (1 << (ipLenth - 24)); n++ {
+		for m := 0; m < (1 << 8); m++ {
+			for j := 0; j < (1 << 8); j++ {
+				for i := 0; i < (1 << 8); i++ {
+					ipBegin[3]++
+					ipNext := make([]byte, len(ipBegin))
+					copy(ipNext, ipBegin)
+					if ipNet.Contains(ipNext) {
+						ipList = append(ipList, ipNext)
+					} else {
+						break
+					}
+				}
+				ipBegin[2]++
+			}
+			ipBegin[1]++
+		}
+		ipBegin[0]++
+	}
+
+	return ipList
+}
+
+func getIpsForThreeLayers(ipNet *net.IPNet, ipBegin net.IP, ipLenth int) []net.IP {
+	ipList := []net.IP{}
+
+	for m := 0; m < (1 << (ipLenth - 16)); m++ {
+		for j := 0; j < (1 << 8); j++ {
+			for i := 0; i < (1 << 8); i++ {
+				ipBegin[3]++
+				ipNext := make([]byte, len(ipBegin))
+				copy(ipNext, ipBegin)
+				if ipNet.Contains(ipNext) {
+					ipList = append(ipList, ipNext)
+				} else {
+					break
+				}
+			}
+			ipBegin[2]++
+		}
+		ipBegin[1]++
+	}
+
+	return ipList
+}
+
+func getIpsForTwoLayers(ipNet *net.IPNet, ipBegin net.IP, ipLenth int) []net.IP {
+	ipList := []net.IP{}
+
+	for j := 0; j < (1 << (ipLenth - 8)); j++ {
+		for i := 0; i < (1 << 8); i++ {
+			ipBegin[3]++
+			ipNext := make([]byte, len(ipBegin))
+			copy(ipNext, ipBegin)
+			if ipNet.Contains(ipNext) {
+				ipList = append(ipList, ipNext)
+			} else {
+				break
+			}
+		}
+		ipBegin[2]++
+	}
+
+	return ipList
+}
+
+func getIpsForOneLayers(ipNet *net.IPNet, ipBegin net.IP, ipLenth int) []net.IP {
+	ipList := []net.IP{}
+
+	for i := 0; i < (1 << (ipLenth - 8)); i++ {
+		ipBegin[3]++
+		ipNext := make([]byte, len(ipBegin))
+		copy(ipNext, ipBegin)
+		if ipNet.Contains(ipNext) {
+			ipList = append(ipList, ipNext)
+		} else {
+			break
+		}
+	}
+
+	return ipList
+}
+
+func NextIP(ip net.IP) net.IP {
+	// ip := net.ParseIP(s).To4()
+	ip = ip.To4()
+
+	if ip[3] == 0xff {
+		if ip[2] == 0xff {
+			if ip[1] == 0xff {
+				if ip[0] == 0xff {
+					fmt.Println("没有下一位")
+					return nil
+				}
+				ip[3] = 0
+				ip[2] = 0
+				ip[1] = 0
+				ip[0]++
+				return ip
+			}
+			ip[3] = 0
+			ip[2] = 0
+			ip[1]++
+
+			return ip
+		}
+		ip[3] = 0
+		ip[2]++
+
+		return ip
+	}
+
+	ip[3]++
+	return ip
 }
