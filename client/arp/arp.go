@@ -6,12 +6,19 @@ import (
 	"net"
 )
 
+// 定义一个 map 存放网卡与同一网段 ip 的映射关系
+type InterfaceIps map[string]IpSubnets
+
+// 定义一个 map 存放子网与属于此子网的所有 ip
+type IpSubnets map[string][]net.IP
+
 func Arp() {
 	ifaceList, err := net.Interfaces()
 	if err != nil {
 		log.Fatalf("get host interfaces failed, err: %v\n", err)
 	}
 
+	interfaceIps := make(InterfaceIps)
 	for _, iface := range ifaceList {
 		// 排除 down 的网卡
 		if iface.Flags&net.FlagUp == 0 {
@@ -28,28 +35,40 @@ func Arp() {
 			continue
 		}
 
-		// 排除没有 ipv4 地址的网卡，因为 arp 只服务于 ipv4
+		// 排除没有 ip 的网卡
 		addrList, err := iface.Addrs()
 		if err != nil {
 			log.Printf("get addrs failed, err: %v", err)
 			continue
 		}
+		// fmt.Println(addrList)
+		// fmt.Println(len(addrList))
 		if len(addrList) == 0 {
 			continue
 		}
 		// fmt.Printf("网卡名: %s, ips: %v\n", iface.Name, addrList)
+
+		// 排除没有 ipv4 地址的网卡，因为 arp 只服务于 ipv4
+		ips := make(IpSubnets)
 		for _, addrObj := range addrList {
 			if ip, ok := addrObj.(*net.IPNet); ok {
 				if ip.IP.To4() != nil {
-					fmt.Printf("网卡名: %s, ips: %v\n", iface.Name, addrObj)
-					GetIps(ip)
+					log.Printf("网卡名: %s, ips: %v\n", iface.Name, addrObj)
+					ipList := GetIps(ip)
+					ips[addrObj.String()] = ipList
 				}
 			}
 		}
-
-		// fmt.Println(iface.Name)
+		if len(ips) != 0 {
+			interfaceIps[iface.Name] = ips
+		}
 	}
+	fmt.Println(interfaceIps)
 }
+
+// func listenARPPackect() {
+
+// }
 
 // 废弃，实现的比较冗余
 // 获取同子网的所有 ip , 因为 ARP 协议作用范围在局域网中
@@ -83,6 +102,7 @@ func GetIps(ipNet *net.IPNet) []net.IP {
 		copy(ipNext, ip)
 		ipList = append(ipList, ipNext)
 	}
+
 	return ipList
 }
 
