@@ -1,9 +1,16 @@
 package arp
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"log"
 	"net"
+
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
+	"github.com/google/gopacket/pcap"
+	manuf "github.com/timest/gomanuf"
 )
 
 // 定义一个 map 存放网卡与同一网段 ip 的映射关系
@@ -66,9 +73,51 @@ func Arp() {
 	fmt.Println(interfaceIps)
 }
 
-// func listenARPPackect() {
+// TODO: 看看这里能否复用，因为网卡上接收的包有很多类型，能否根据包的类型进行不同的处理逻辑
+// 对不同的网卡开启 pcap 监听并对接收的ARP包进行处理
+func listenARPPacket(ctx context.Context, iface net.Interface) {
+	// 对不同的网卡开启 pcap 监听
+	handle, err := pcap.OpenLive(iface.Name, 65536, true, pcap.BlockForever)
+	if err != nil {
+		log.Fatal("pcap open fail, err:", err)
+	}
+	defer handle.Close()
 
-// }
+	ps := gopacket.NewPacketSource(handle, handle.LinkType())
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case p := <-ps.Packets():
+			arpLayer := p.Layer(layers.LayerTypeARP)
+			if arpLayer != nil {
+				arp, _ := arpLayer.(*layers.ARP)
+				if arpLayer == nil {
+					continue
+				}
+				if arp.Operation != layers.ARPReply || bytes.Equal([]byte(iface.HardwareAddr), arp.SourceHwAddress) {
+					// This is a packet I sent.
+					continue
+				}
+				if arp.Operation == layers.ARPReply {
+					mac := net.HardwareAddr(arp.SourceHwAddress)
+					m := manuf.Search(mac.String())
+					if _, ok := infoSet[net.IP(arp.SourceProtAddress).String()]; !ok {
+						ch <- true
+						infoSet[net.IP(arp.SourceProtAddress).String()] = info{mac, m}
+						ch <- false
+					}
+				}
+			}
+		}
+	}
+}
+
+// 发送 ARP 包
+func sendARPPacket() {
+
+}
 
 // 废弃，实现的比较冗余
 // 获取同子网的所有 ip , 因为 ARP 协议作用范围在局域网中
